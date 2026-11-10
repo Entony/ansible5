@@ -1,0 +1,45 @@
+---
+- name: Установка репозитория для Nginx
+  ansible.builtin.yum:
+    name: epel-release
+    state: present
+
+- name: Установка Nginx 
+  ansible.builtin.yum:
+    name: nginx
+    state: present
+  notify: Restart nginx service
+
+- name: Создание директории для LightHouse 
+  ansible.builtin.file:
+    path: "{{ lighthouse_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Скачивание LightHouse 
+  ansible.builtin.get_url:
+    url: "https://github.com/VKCOM/lighthouse/archive/refs/heads/master.tar.gz"
+    dest: "/tmp/lighthouse-master.tar.gz"
+    mode: "0644"
+
+- name: Разархивация LightHouse 
+  ansible.builtin.unarchive:
+    src: "/tmp/lighthouse-master.tar.gz"
+    dest: "{{ lighthouse_dir }}"
+    remote_src: true
+    extra_opts: ["--strip-components=1"]
+  notify: Restart nginx service
+
+- name: Конфигурируем Nginx для LightHouse из шаблона
+  ansible.builtin.template:
+    src: lighthouse.conf.j2
+    dest: "/etc/nginx/conf.d/lighthouse.conf"
+    mode: "0644"
+  notify: Restart nginx service
+
+- name: Настройка запуска и рестарта Nginx
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+

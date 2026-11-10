@@ -1,0 +1,173 @@
+---
+- name: Install Clickhouse
+  hosts: clickhouse
+  handlers:
+    - name: Start clickhouse service
+      become: true
+      ansible.builtin.service:
+        name: clickhouse-server
+        state: restarted
+  tasks:
+    - name: Download Clickhouse
+      block:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.noarch.rpm"
+            dest: "./{{ item }}-{{ clickhouse_version }}.rpm"
+            mode: "0644"
+          with_items: "{{ clickhouse_packages }}"
+      rescue:
+        - name: Get clickhouse distrib alternative
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/rpm/stable/clickhouse-common-static-{{ clickhouse_version }}.x86_64.rpm"
+            dest: "./clickhouse-common-static-{{ clickhouse_version }}.rpm"
+            mode: "0644"
+
+    - name: Install clickhouse packages
+      become: true
+      ansible.builtin.yum:
+        name:
+          - "clickhouse-common-static-{{ clickhouse_version }}.rpm"
+          - "clickhouse-client-{{ clickhouse_version }}.rpm"
+          - "clickhouse-server-{{ clickhouse_version }}.rpm"
+      notify: Start clickhouse service
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Create database
+      ansible.builtin.command: "clickhouse-client -q 'create database logs;'"
+      register: create_db
+      failed_when: create_db.rc != 0 and create_db.rc != 82
+      changed_when: create_db.rc == 0
+
+- name: Установка и настройка Vector
+  hosts: vector
+  become: true
+  vars:
+    vector_version: "0.34.0"
+    vector_config_dir: "/etc/vector"
+  handlers:
+    - name: Restart vector service
+      ansible.builtin.service:
+        name: vector
+        state: restarted
+  tasks:
+    - name: Создание директории для Vector
+      ansible.builtin.file:
+        path: "{{ vector_config_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Скачивание Vector
+      ansible.builtin.get_url:
+        url: "https://github.com/vectordotdev/vector/releases/download/v{{ vector_version }}/vector-{{ vector_version }}-x86_64-unknown-linux-musl.tar.gz"
+        dest: "/tmp/vector-{{ vector_version }}.tar.gz"
+        mode: "0644"
+
+    - name: Разархивация Vector
+      ansible.builtin.unarchive:
+        src: "/tmp/vector-{{ vector_version }}.tar.gz"
+        dest: "/tmp"
+        remote_src: true
+        creates: "/tmp/vector-x86_64-unknown-linux-musl"
+
+    - name: Установка Vector
+      ansible.builtin.copy:
+        src: "/tmp/vector-x86_64-unknown-linux-musl/bin/vector"
+        dest: "/usr/local/bin/vector"
+        mode: "0755"
+        remote_src: true
+
+    - name: Создание службы systemd для Vector
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/vector.service"
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Vector Log Agent
+          Documentation=https://vector.dev
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/vector --config /etc/vector/vector.toml
+          Restart=always
+          RestartSec=5
+          StandardOutput=syslog
+          StandardError=syslog
+          SyslogIdentifier=vector
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart vector service
+
+
+    - name: Настройка Vector из шаблона
+      ansible.builtin.template:
+        src: templates/vector.toml.j2
+        dest: "{{ vector_config_dir }}/vector.toml"
+        mode: "0644"
+      notify: Restart vector service
+
+    - name: Настройка запуска и рестарта Vector
+      ansible.builtin.service:
+        name: vector
+        state: started
+        enabled: true
+
+
+- name: Установка и настройка LightHouse
+  hosts: lighthouse
+  become: true
+  vars:
+    lighthouse_dir: "/var/www/lighthouse"
+  handlers:
+    - name: Restart nginx service
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+  tasks:
+    - name: Установка репозитория для Nginx
+      ansible.builtin.yum:
+        name: epel-release
+        state: present
+
+    - name: Установка Nginx 
+      ansible.builtin.yum:
+        name: nginx
+        state: present
+      notify: Restart nginx service
+
+    - name: Создание директории для LightHouse 
+      ansible.builtin.file:
+        path: "{{ lighthouse_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: СкачиваниеLightHouse 
+      ansible.builtin.get_url:
+        url: "https://github.com/VKCOM/lighthouse/archive/refs/heads/master.tar.gz"
+        dest: "/tmp/lighthouse-master.tar.gz"
+        mode: "0644"
+
+    - name: Разархивация LightHouse 
+      ansible.builtin.unarchive:
+        src: "/tmp/lighthouse-master.tar.gz"
+        dest: "{{ lighthouse_dir }}"
+        remote_src: true
+        extra_opts: ["--strip-components=1"] # Убираем лишнюю вложенную папку из архива
+
+    - name: Конфигурируем Nginx для LightHouse из шаблона
+      ansible.builtin.template:
+        src: templates/lighthouse.conf.j2
+        dest: "/etc/nginx/conf.d/lighthouse.conf"
+        mode: "0644"
+      notify: Restart nginx service
+
+    - name: Настройка запуска и рестарта Nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true

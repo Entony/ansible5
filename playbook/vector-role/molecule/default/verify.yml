@@ -1,0 +1,38 @@
+---
+- name: verify
+  hosts: all
+  gather_facts: true
+  vars:
+    vector_config_dir: "{{ local_vector_config_dir | default('/etc/vector') }}"
+  tasks:
+    - name: Check if Vector binary exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/vector
+      register: vector_bin
+
+    - name: Assert Vector binary is installed
+      ansible.builtin.assert:
+        that: vector_bin.stat.exists
+        fail_msg: "Бинарный файл Vector не найден по пути /usr/local/bin/vector"
+
+    - name: Validate Vector configuration
+      ansible.builtin.command: /usr/local/bin/vector validate --config-toml {{ vector_config_dir }}/vector.toml
+      register: vector_validation
+      changed_when: false
+      failed_when: vector_validation.rc != 0
+
+    - name: Assert Vector configuration is valid
+      ansible.builtin.assert:
+        that: vector_validation.rc == 0
+        fail_msg: "Конфигурация Vector не прошла валидацию!"
+
+    - name: Check if Vector systemd unit exists
+      ansible.builtin.stat:
+        path: /etc/systemd/system/vector.service
+      register: vector_service_file
+
+    - name: Assert Vector service file is created
+      ansible.builtin.assert:
+        that: vector_service_file.stat.exists
+        fail_msg: "Файл службы systemd /etc/systemd/system/vector.service не был создан!"
+
