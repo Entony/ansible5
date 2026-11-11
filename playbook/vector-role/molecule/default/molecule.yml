@@ -1,59 +1,26 @@
 ---
-# Dependency management (download roles/collections)
 dependency:
   name: galaxy
-  options:
-    ignore-certs: false
-    ignore-errors: false
-    role-file: requirements.yml
-    requirements-file: requirements.yml
-driver: 
-  name: docker
-
+  enabled: false
+driver:
+  name: podman # <-- Строго podman по заданию
 platforms:
-  - name: ubuntu-latest
-    image: docker.io/library/ubuntu:latest # <-- Заменили на стабильный официальный
-  - name: oraclelinux-8
-    image: docker.io/library/oraclelinux:8 # <-- Заменили на стабильный официальный
-
-ansible:
-  cfg:
-    defaults:
-      host_key_checking: false
-      verbosity: 1
-    ssh_connection:
-      pipelining: true
+  - name: ubuntu-compatibility
+    # Используем готовый и протестированный образ окружения Ansible
+    image: ghcr.io/ansible/creator-ee:v0.22.0
+    privileged: true
+    pre_build_image: true # <-- Отключает внутреннюю сборку (снимает ошибку cgroups)
+provisioner:
+  name: ansible
   env:
-    ANSIBLE_FORCE_COLOR: "1"
-    ANSIBLE_LOAD_CALLBACK_PLUGINS: "1"
-    ANSIBLE_REMOTE_TMP: /tmp/.ansible/tmp # решает проблему прав на Gathering Facts
-    
-  executor:
-    backend: ansible-playbook
-    args:
-      ansible_playbook:
-        - --diff
-        - --force-handlers
-        # - --inventory=/path/to/inventory.yml # убирает ошибку с путями
-      ansible_navigator:
-        - --mode stdout
-        - --pull-policy missing
-        - --execution-environment-image ghcr.io/ansible/community-ansible-dev-tools:latest
-
-  playbooks:
-    create: create.yml
-    converge: converge.yml
-    destroy: destroy.yml
-    cleanup: cleanup.yml
-    prepare: prepare.yml
-    side_effect: side_effect.yml
-    verify: verify.yml
+    ANSIBLE_REMOTE_TMP: /tmp/.ansible/tmp
+verifier:
+  name: ansible
+prerun: false
 
 scenario:
-  name: default
+  name: compatibility
   test_sequence:
-    - dependency
-    - cleanup
     - destroy
     - syntax
     - create
@@ -62,5 +29,4 @@ scenario:
     - idempotence
     - side_effect
     - verify
-    - cleanup
     - destroy

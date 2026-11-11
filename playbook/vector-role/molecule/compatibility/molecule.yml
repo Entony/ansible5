@@ -1,0 +1,30 @@
+---
+dependency:
+  name: galaxy
+  enabled: false
+driver:
+  name: podman
+platforms:
+  - name: ubuntu-compatibility
+    image: ghcr.io/ansible/creator-ee:v0.22.0
+    privileged: true
+    pre_build_image: true
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_REMOTE_TMP: /tmp/.ansible/tmp
+verifier:
+  name: ansible
+prerun: false
+scenario:
+  name: compatibility
+  test_sequence:
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - side_effect
+    - verify
+    - destroy

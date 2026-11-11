@@ -77,6 +77,28 @@
 
 ![alt text](image-5.png)
 
+Добавлен тег в коммит:
+
+![alt text](image-6.png)
 
 
+## Tox
+
+Исходный запуск tox выдал ошибок:
+
+![alt text](image-7.png)
+
+Создана папка compatibility и в ней файл [molecule.yml](playbook/vector-role/molecule/compatibility/molecule.yml).
+
+Скопирован файл converge из дефолтного сценария:
+
+cp molecule/default/converge.yml molecule/compatibility/converge.yml
+
+[Вписал в нем](playbook/vector-role/molecule/compatibility/converge.yml) импорт задачи основной роли.
+
+В [tox.ini ](playbook/vector-role/tox.ini)были внесены изменения, которые решили 2 задачи: запустить нужный облегчённый сценарий (compatibility) и устранить внутренний конфликт версий библиотек в образе контейнера.
+
+Результат выполнения команды tox:
+
+![alt text](image-8.png)
 
